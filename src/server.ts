@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import { Agent, AgentOptions } from '@anthropic-ai/agent-sdk';
+import { Agent, AgentOptions } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'crypto';
 
 const app = express();
