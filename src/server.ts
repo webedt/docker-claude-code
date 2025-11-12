@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Agent, AgentOptions } from '@anthropic-ai/agent-sdk';
-import Anthropic from '@anthropic-ai/sdk';
 import { randomUUID } from 'crypto';
 
 const app = express();
@@ -17,18 +16,10 @@ const activeSessions = new Map<string, Agent>();
 
 /**
  * Initialize Claude Agent with workspace configuration
+ * Authentication is handled via .claude/config.json set up by CLAUDE_CODE_CONFIG_JSON
  */
 function createAgent(sessionId: string, customWorkspace?: string): Agent {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is required');
-  }
-
-  const client = new Anthropic({ apiKey });
-
   const agentOptions: AgentOptions = {
-    client,
     model: 'claude-sonnet-4-5-20250929',
     workingDirectory: customWorkspace || WORKSPACE_DIR,
     systemPrompt: `You are Claude Code, running in a containerized environment. The working directory is ${customWorkspace || WORKSPACE_DIR}.`,

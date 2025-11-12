@@ -9,8 +9,7 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - CLAUDE_CODE_AUTH_JSON=${CLAUDE_CODE_AUTH_JSON}
+      - CLAUDE_CODE_CONFIG_JSON=${CLAUDE_CODE_CONFIG_JSON}
       - PORT=3000
       - WORKSPACE_DIR=/workspace
       - NODE_ENV=production

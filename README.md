@@ -15,14 +15,13 @@ A TypeScript-based SSE (Server-Sent Events) streaming API server that provides a
 
 - Docker (for containerized deployment)
 - Node.js 20+ (for local development)
-- Anthropic API key
+- Anthropic API key (included in config JSON)
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | Your Anthropic API key |
-| `CLAUDE_CODE_AUTH_JSON` | Optional | JSON string for Claude Code authentication config |
+| `CLAUDE_CODE_CONFIG_JSON` | Yes | JSON string containing Claude Code configuration (including API key) |
 | `PORT` | No | Server port (default: 3000) |
 | `WORKSPACE_DIR` | No | Workspace directory (default: /workspace) |
 
@@ -40,8 +39,7 @@ docker build -t claude-code-sse-api .
 docker run -d \
   --name claude-api \
   -p 3000:3000 \
-  -e ANTHROPIC_API_KEY="your-api-key-here" \
-  -e CLAUDE_CODE_AUTH_JSON='{"session_key": "your-session-key"}' \
+  -e CLAUDE_CODE_CONFIG_JSON='{"apiKey": "sk-ant-your-api-key-here"}' \
   -v $(pwd)/workspace:/workspace \
   claude-code-sse-api
 ```
@@ -295,8 +293,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - CLAUDE_CODE_AUTH_JSON=${CLAUDE_CODE_AUTH_JSON}
+      - CLAUDE_CODE_CONFIG_JSON=${CLAUDE_CODE_CONFIG_JSON}
       - PORT=3000
       - WORKSPACE_DIR=/workspace
     volumes:
@@ -306,6 +303,8 @@ services:
 
 Run with:
 ```bash
+# Set your config in .env file or export it
+export CLAUDE_CODE_CONFIG_JSON='{"apiKey": "sk-ant-your-key"}'
 docker-compose up -d
 ```
 
@@ -332,8 +331,9 @@ docker logs claude-api
 ```
 
 Common issues:
-- Missing `ANTHROPIC_API_KEY` environment variable
-- Invalid `CLAUDE_CODE_AUTH_JSON` format (must be valid JSON)
+- Missing `CLAUDE_CODE_CONFIG_JSON` environment variable
+- Invalid `CLAUDE_CODE_CONFIG_JSON` format (must be valid JSON)
+- Missing `apiKey` field in the config JSON
 - Port 3000 already in use
 
 ### SSE connection drops

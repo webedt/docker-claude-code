@@ -10,9 +10,9 @@ if [ ! -d "$WORKSPACE_DIR" ]; then
   mkdir -p "$WORKSPACE_DIR"
 fi
 
-# Setup Claude Code authentication if CLAUDE_CODE_AUTH_JSON is provided
-if [ -n "$CLAUDE_CODE_AUTH_JSON" ]; then
-  echo "🔐 Setting up Claude Code authentication..."
+# Setup Claude Code configuration if CLAUDE_CODE_CONFIG_JSON is provided
+if [ -n "$CLAUDE_CODE_CONFIG_JSON" ]; then
+  echo "🔐 Setting up Claude Code configuration..."
 
   # Create .claude directory if it doesn't exist
   CLAUDE_DIR="${HOME}/.claude"
@@ -20,27 +20,19 @@ if [ -n "$CLAUDE_CODE_AUTH_JSON" ]; then
     mkdir -p "$CLAUDE_DIR"
   fi
 
-  # Write the auth JSON to config.json
+  # Write the config JSON to config.json
   CONFIG_FILE="${CLAUDE_DIR}/config.json"
-  echo "$CLAUDE_CODE_AUTH_JSON" > "$CONFIG_FILE"
-  echo "✅ Authentication configured at: $CONFIG_FILE"
+  echo "$CLAUDE_CODE_CONFIG_JSON" > "$CONFIG_FILE"
+  echo "✅ Configuration set up at: $CONFIG_FILE"
 
   # Validate JSON format
   if ! jq empty "$CONFIG_FILE" 2>/dev/null; then
-    echo "❌ Error: CLAUDE_CODE_AUTH_JSON is not valid JSON"
+    echo "❌ Error: CLAUDE_CODE_CONFIG_JSON is not valid JSON"
     exit 1
   fi
 else
-  echo "⚠️  Warning: CLAUDE_CODE_AUTH_JSON not set. Claude Code authentication may not work."
+  echo "⚠️  Warning: CLAUDE_CODE_CONFIG_JSON not set. Claude Code authentication may not work."
 fi
-
-# Verify ANTHROPIC_API_KEY is set
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-  echo "❌ Error: ANTHROPIC_API_KEY environment variable is required"
-  exit 1
-fi
-
-echo "✅ ANTHROPIC_API_KEY is set"
 
 # Change to the app directory
 cd /app
