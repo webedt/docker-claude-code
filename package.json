@@ -1,0 +1,33 @@
+{
+  "name": "claude-code-sse-api",
+  "version": "1.0.0",
+  "description": "SSE streaming API server for Claude Code using Agent SDK",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "claude",
+    "sse",
+    "streaming",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/agent-sdk": "^0.1.0",
+    "@anthropic-ai/sdk": "^0.32.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  }
+}

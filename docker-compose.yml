@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  claude-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: claude-code-sse-api
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CLAUDE_CODE_AUTH_JSON=${CLAUDE_CODE_AUTH_JSON}
+      - PORT=3000
+      - WORKSPACE_DIR=/workspace
+      - NODE_ENV=production
+    volumes:
+      # Mount workspace directory for persistent storage
+      - ./workspace:/workspace
+      # Optional: Mount custom config directory
+      # - ./claude-config:/root/.claude
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - claude-network
+
+networks:
+  claude-network:
+    driver: bridge
