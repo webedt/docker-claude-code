@@ -21,14 +21,21 @@ let serverStatus: 'idle' | 'busy' = 'idle';
  * Create options for Claude Agent query
  * Authentication is handled via .claude/.credentials.json set up by CLAUDE_CODE_CREDENTIALS_JSON
  */
-function createQueryOptions(customWorkspace?: string, skipPermissions?: boolean): Options {
-  return {
+function createQueryOptions(customWorkspace?: string, skipPermissions?: boolean, resumeSessionId?: string): Options {
+  const options: Options = {
     model: 'claude-sonnet-4-5-20250929',
     cwd: customWorkspace || WORKSPACE_DIR,
     systemPrompt: `You are Claude Code, running in a containerized environment. The working directory is ${customWorkspace || WORKSPACE_DIR}.`,
     allowDangerouslySkipPermissions: skipPermissions ?? true,
     permissionMode: (skipPermissions ?? true) ? 'bypassPermissions' : 'default',
   };
+
+  // Add resume option if session ID is provided
+  if (resumeSessionId) {
+    options.resume = resumeSessionId;
+  }
+
+  return options;
 }
 
 /**
@@ -103,10 +110,11 @@ app.get('/api/sessions', (req: Request, res: Response) => {
 
 /**
  * SSE streaming endpoint for agent interactions
+ * Supports resuming from a previous session by providing resumeSessionId
  */
 app.post('/api/stream/:sessionId', async (req: Request, res: Response) => {
   const { sessionId } = req.params;
-  const { prompt, workspace, dangerouslySkipPermissions } = req.body;
+  const { prompt, workspace, dangerouslySkipPermissions, resumeSessionId } = req.body;
 
   if (!prompt) {
     res.status(400).json({ error: 'Prompt is required' });
@@ -125,10 +133,15 @@ app.post('/api/stream/:sessionId', async (req: Request, res: Response) => {
   res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
   // Send initial connection message
-  res.write(`data: ${JSON.stringify({ type: 'connected', sessionId })}\n\n`);
+  res.write(`data: ${JSON.stringify({
+    type: 'connected',
+    sessionId,
+    resuming: !!resumeSessionId,
+    resumedFrom: resumeSessionId || undefined
+  })}\n\n`);
 
   try {
-    const options = createQueryOptions(workspace, dangerouslySkipPermissions);
+    const options = createQueryOptions(workspace, dangerouslySkipPermissions, resumeSessionId);
     const queryStream = query({ prompt, options });
 
     // Stream messages from the query
@@ -163,9 +176,10 @@ app.post('/api/stream/:sessionId', async (req: Request, res: Response) => {
 /**
  * One-off execution endpoint (no session required)
  * For ephemeral containers: Sets status to busy, executes job, then exits process
+ * Supports resuming from a previous session by providing resumeSessionId
  */
 app.post('/api/execute', async (req: Request, res: Response) => {
-  const { prompt, workspace, dangerouslySkipPermissions } = req.body;
+  const { prompt, workspace, dangerouslySkipPermissions, resumeSessionId } = req.body;
 
   if (!prompt) {
     res.status(400).json({ error: 'Prompt is required' });
@@ -184,9 +198,14 @@ app.post('/api/execute', async (req: Request, res: Response) => {
   const tempSessionId = randomUUID();
 
   try {
-    res.write(`data: ${JSON.stringify({ type: 'connected', sessionId: tempSessionId })}\n\n`);
+    res.write(`data: ${JSON.stringify({
+      type: 'connected',
+      sessionId: tempSessionId,
+      resuming: !!resumeSessionId,
+      resumedFrom: resumeSessionId || undefined
+    })}\n\n`);
 
-    const options = createQueryOptions(workspace, dangerouslySkipPermissions);
+    const options = createQueryOptions(workspace, dangerouslySkipPermissions, resumeSessionId);
     const queryStream = query({ prompt, options });
 
     // Stream messages from the query
