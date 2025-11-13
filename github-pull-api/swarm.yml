@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  github-pull-api:
+    image: github-pull-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # Use ingress mode for load balancing across replicas
+      - target: 4000
+        published: 4000
+        protocol: tcp
+        mode: ingress  # Load balances requests across all replicas
+    environment:
+      - PORT=4000
+      - WORKSPACE_DIR=/workspace
+      - NODE_ENV=production
+    volumes:
+      # All replicas share the same workspace
+      - type: bind
+        source: ./workspace
+        target: /workspace
+    networks:
+      - github-pull-network
+    deploy:
+      # Always maintain 5 replicas
+      replicas: 5
+      # Restart containers immediately when they exit
+      restart_policy:
+        condition: any
+        delay: 0s
+        max_attempts: 0  # unlimited restarts
+      # Update configuration
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      # Resource limits (optional, adjust as needed)
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "1G"
+        reservations:
+          cpus: "0.25"
+          memory: "256M"
+      # Placement preferences (optional)
+      placement:
+        max_replicas_per_node: 5
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  github-pull-network:
+    driver: overlay
+    attachable: true
