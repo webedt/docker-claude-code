@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  claude-api:
+    image: claude-code-sse-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # Use ingress mode for load balancing across replicas
+      - target: 3000
+        published: 3000
+        protocol: tcp
+        mode: ingress  # Load balances requests across all replicas
+    environment:
+      - PORT=3000
+      - WORKSPACE_DIR=/workspace
+      - NODE_ENV=production
+      - CLAUDE_CODE_CREDENTIALS_SECRET=/run/secrets/claude_credentials
+    secrets:
+      - claude_credentials
+    volumes:
+      # Each replica gets its own workspace subdirectory
+      - type: bind
+        source: ./workspace
+        target: /workspace
+    networks:
+      - claude-network
+    deploy:
+      # Always maintain 5 replicas
+      replicas: 5
+      # Restart containers immediately when they exit
+      restart_policy:
+        condition: any
+        delay: 0s
+        max_attempts: 0  # unlimited restarts
+      # Update configuration
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      # Resource limits (optional, adjust as needed)
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "2G"
+        reservations:
+          cpus: "0.25"
+          memory: "512M"
+      # Placement preferences (optional)
+      placement:
+        max_replicas_per_node: 5
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  claude-network:
+    driver: overlay
+    attachable: true
+
+secrets:
+  claude_credentials:
+    external: true
