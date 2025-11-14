@@ -1,5 +1,6 @@
 import { BaseProvider } from './BaseProvider';
 import { ClaudeCodeProvider } from './ClaudeCodeProvider';
+import { CodexProvider } from './CodexProvider';
 
 /**
  * Factory for creating coding assistant provider instances
@@ -21,16 +22,21 @@ export class ProviderFactory {
       case 'claude':
         return new ClaudeCodeProvider(accessToken, workspace, options?.model);
 
+      case 'codex':
+      case 'cursor':
+        return new CodexProvider(accessToken, workspace);
+
       // Future providers:
-      // case 'cursor':
-      //   return new CursorProvider(accessToken, workspace);
       // case 'copilot':
       //   return new CopilotProvider(accessToken, workspace);
       // case 'aider':
       //   return new AiderProvider(accessToken, workspace);
 
       default:
-        throw new Error(`Unsupported provider: ${providerName}. Supported providers: claude-code`);
+        throw new Error(
+          `Unsupported provider: ${providerName}. ` +
+          `Supported providers: ${this.getSupportedProviders().join(', ')}`
+        );
     }
   }
 
@@ -38,7 +44,7 @@ export class ProviderFactory {
    * Get list of supported providers
    */
   static getSupportedProviders(): string[] {
-    return ['claude-code'];
+    return ['claude-code', 'codex', 'cursor'];
   }
 
   /**

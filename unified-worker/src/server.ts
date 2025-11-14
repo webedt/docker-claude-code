@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { ExecuteRequest, APIError } from './types';
 import { Orchestrator } from './orchestrator';
+import { SessionManager } from './clients/sessionManager';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,8 +16,9 @@ app.use(express.json({ limit: '10mb' }));
 // Worker state
 let workerStatus: 'idle' | 'busy' = 'idle';
 
-// Create orchestrator instance
+// Create orchestrator and session manager instances
 const orchestrator = new Orchestrator(WORKSPACE_DIR, DB_BASE_URL);
+const sessionManager = new SessionManager(WORKSPACE_DIR);
 
 /**
  * Health check endpoint
@@ -38,6 +40,102 @@ app.get('/status', (req: Request, res: Response) => {
     status: workerStatus,
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * List all sessions
+ * Returns array of session IDs with metadata
+ */
+app.get('/sessions', (req: Request, res: Response) => {
+  try {
+    const sessionIds = sessionManager.listSessions();
+    const sessions = sessionIds.map(sessionId => {
+      const metadata = sessionManager.loadMetadata(sessionId);
+      return {
+        sessionId,
+        metadata: metadata || null,
+        exists: sessionManager.sessionExists(sessionId)
+      };
+    });
+
+    res.json({
+      count: sessions.length,
+      sessions
+    });
+  } catch (error) {
+    console.error('[Sessions] Error listing sessions:', error);
+    res.status(500).json({
+      error: 'internal_error',
+      message: 'Failed to list sessions'
+    });
+  }
+});
+
+/**
+ * Get session details
+ * Returns session metadata and summary information
+ */
+app.get('/sessions/:sessionId', (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+
+  try {
+    if (!sessionManager.sessionExists(sessionId)) {
+      res.status(404).json({
+        error: 'session_not_found',
+        message: `Session not found: ${sessionId}`
+      });
+      return;
+    }
+
+    const metadata = sessionManager.loadMetadata(sessionId);
+    const events = sessionManager.getStreamEvents(sessionId);
+
+    res.json({
+      sessionId,
+      metadata,
+      eventCount: events.length,
+      workspacePath: sessionManager.getSessionWorkspace(sessionId),
+      executionPath: sessionManager.getExecutionWorkspace(sessionId)
+    });
+  } catch (error) {
+    console.error(`[Sessions] Error getting session ${sessionId}:`, error);
+    res.status(500).json({
+      error: 'internal_error',
+      message: 'Failed to retrieve session details'
+    });
+  }
+});
+
+/**
+ * Get stream events for a session
+ * Returns all SSE events for replay/review after disconnection
+ */
+app.get('/sessions/:sessionId/stream', (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+
+  try {
+    if (!sessionManager.sessionExists(sessionId)) {
+      res.status(404).json({
+        error: 'session_not_found',
+        message: `Session not found: ${sessionId}`
+      });
+      return;
+    }
+
+    const events = sessionManager.getStreamEvents(sessionId);
+
+    res.json({
+      sessionId,
+      eventCount: events.length,
+      events
+    });
+  } catch (error) {
+    console.error(`[Sessions] Error getting stream events for ${sessionId}:`, error);
+    res.status(500).json({
+      error: 'internal_error',
+      message: 'Failed to retrieve stream events'
+    });
+  }
 });
 
 /**
@@ -136,6 +234,9 @@ app.use((req: Request, res: Response) => {
     availableEndpoints: [
       'GET  /health',
       'GET  /status',
+      'GET  /sessions',
+      'GET  /sessions/:sessionId',
+      'GET  /sessions/:sessionId/stream',
       'POST /execute'
     ]
   });
@@ -154,16 +255,21 @@ app.listen(PORT, () => {
   console.log(`📊 Status: ${workerStatus}`);
   console.log('');
   console.log('Available endpoints:');
-  console.log('  GET  /health  - Health check');
-  console.log('  GET  /status  - Worker status (idle/busy)');
-  console.log('  POST /execute - Execute coding assistant request');
+  console.log('  GET  /health                    - Health check');
+  console.log('  GET  /status                    - Worker status (idle/busy)');
+  console.log('  GET  /sessions                  - List all sessions');
+  console.log('  GET  /sessions/:id              - Get session details');
+  console.log('  GET  /sessions/:id/stream       - Get session stream events');
+  console.log('  POST /execute                   - Execute coding assistant request');
   console.log('');
   console.log('Supported providers:');
   console.log('  - claude-code');
+  console.log('  - codex / cursor');
   console.log('');
   console.log('Worker behavior:');
   console.log('  - Ephemeral: exits after completing each job');
   console.log('  - Returns 429 if busy (load balancer will retry)');
+  console.log('  - Session events persisted to workspace for recovery');
   console.log('='.repeat(60));
 });
 

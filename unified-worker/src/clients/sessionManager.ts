@@ -9,6 +9,7 @@ import { SessionMetadata } from '../types';
 export class SessionManager {
   private workspaceRoot: string;
   private metadataFilename = '.session-metadata.json';
+  private streamEventsFilename = '.stream-events.jsonl';
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
@@ -147,6 +148,39 @@ export class SessionManager {
     const sessionPath = this.getSessionWorkspace(sessionId);
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Append a stream event to the session's event log
+   */
+  appendStreamEvent(sessionId: string, event: any): void {
+    const sessionPath = this.getSessionWorkspace(sessionId);
+    const eventsPath = path.join(sessionPath, this.streamEventsFilename);
+
+    // Append event as JSONL (one JSON object per line)
+    const eventLine = JSON.stringify(event) + '\n';
+    fs.appendFileSync(eventsPath, eventLine, 'utf-8');
+  }
+
+  /**
+   * Get all stream events for a session
+   */
+  getStreamEvents(sessionId: string): any[] {
+    const sessionPath = this.getSessionWorkspace(sessionId);
+    const eventsPath = path.join(sessionPath, this.streamEventsFilename);
+
+    if (!fs.existsSync(eventsPath)) {
+      return [];
+    }
+
+    try {
+      const content = fs.readFileSync(eventsPath, 'utf-8');
+      const lines = content.trim().split('\n').filter(line => line.length > 0);
+      return lines.map(line => JSON.parse(line));
+    } catch (error) {
+      console.error(`[SessionManager] Failed to read stream events for ${sessionId}:`, error);
+      return [];
     }
   }
 }

@@ -6,6 +6,7 @@ import { DBClient } from './clients/dbClient';
 import { SessionManager } from './clients/sessionManager';
 import { ProviderFactory } from './providers/ProviderFactory';
 import { Response } from 'express';
+import { logger } from './utils/logger';
 
 /**
  * Main orchestrator for executing coding assistant requests
@@ -40,6 +41,13 @@ export class Orchestrator {
     const sendEvent = (event: SSEEvent) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
 
+      // Persist to local session workspace
+      try {
+        this.sessionManager.appendStreamEvent(sessionId, event);
+      } catch (err) {
+        console.error('[SessionManager] Failed to persist event:', err);
+      }
+
       // Persist to DB if configured
       if (request.database) {
         this.dbClient.appendChunk(
@@ -70,7 +78,11 @@ export class Orchestrator {
 
       if (isResuming) {
         // Resume existing session
-        console.log(`[Orchestrator] Resuming session: ${sessionId}`);
+        logger.info('Resuming existing session', {
+          component: 'Orchestrator',
+          sessionId,
+          provider: request.codingAssistantProvider
+        });
 
         if (!this.sessionManager.sessionExists(sessionId)) {
           throw new Error(`Session not found: ${sessionId}`);
@@ -153,7 +165,11 @@ export class Orchestrator {
         }
       } else {
         // Create new session
-        console.log(`[Orchestrator] Creating new session: ${sessionId}`);
+        logger.info('Creating new session', {
+          component: 'Orchestrator',
+          sessionId,
+          provider: request.codingAssistantProvider
+        });
 
         workspacePath = this.sessionManager.createSessionWorkspace(sessionId);
 
@@ -163,7 +179,11 @@ export class Orchestrator {
           request.codingAssistantProvider
         );
 
-        console.log(`[Orchestrator] Session workspace created: ${workspacePath}`);
+        logger.info('Session workspace created', {
+          component: 'Orchestrator',
+          sessionId,
+          workspacePath
+        });
       }
 
       // Step 3: Send connection event
@@ -306,10 +326,19 @@ export class Orchestrator {
         );
       }
 
-      console.log(`[Orchestrator] Session ${sessionId} completed in ${duration}ms`);
+      logger.info('Session completed successfully', {
+        component: 'Orchestrator',
+        sessionId,
+        provider: request.codingAssistantProvider,
+        durationMs: duration
+      });
       res.end();
     } catch (error) {
-      console.error('[Orchestrator] Error during execution:', error);
+      logger.error('Error during execution', error, {
+        component: 'Orchestrator',
+        sessionId,
+        provider: request.codingAssistantProvider
+      });
 
       // Send error event
       sendEvent({
