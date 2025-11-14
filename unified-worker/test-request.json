@@ -1,0 +1,5 @@
+{
+  "userRequest": "Create a hello.txt file with the text: Hello from unified worker!",
+  "codingAssistantProvider": "claude-code",
+  "codingAssistantAccessToken": "placeholder"
+}

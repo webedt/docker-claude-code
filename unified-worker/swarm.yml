@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  unified-worker:
+    image: unified-worker:latest
+    ports:
+      - target: 5000
+        published: 5000
+        protocol: tcp
+        mode: ingress
+    environment:
+      - PORT=5000
+      - WORKSPACE_DIR=/workspace
+      - CLAUDE_CODE_CREDENTIALS_SECRET=/run/secrets/claude_credentials
+      - DB_BASE_URL=${DB_BASE_URL:-}
+    volumes:
+      - workspace:/workspace
+    secrets:
+      - claude_credentials
+    networks:
+      - worker-network
+    deploy:
+      replicas: 10
+      restart_policy:
+        condition: any
+        delay: 0s
+        max_attempts: 0
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+      update_config:
+        parallelism: 2
+        delay: 10s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 2
+        delay: 10s
+
+networks:
+  worker-network:
+    driver: overlay
+    attachable: true
+
+volumes:
+  workspace:
+    driver: local
+
+secrets:
+  claude_credentials:
+    external: true
