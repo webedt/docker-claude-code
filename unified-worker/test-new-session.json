@@ -1,0 +1,8 @@
+{
+  "userRequest": "List all files in this repository",
+  "codingAssistantProvider": "claude-code",
+  "codingAssistantAccessToken": "placeholder",
+  "github": {
+    "repoUrl": "https://github.com/webedt/hello-world.git"
+  }
+}

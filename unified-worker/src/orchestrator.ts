@@ -1,23 +1,26 @@
 import { v4 as uuidv4 } from 'uuid';
-import { ExecuteRequest, SSEEvent, ExecutionContext } from './types';
+import { ExecuteRequest, SSEEvent, SessionMetadata } from './types';
 import { GitHubClient } from './clients/githubClient';
 import { DBClient } from './clients/dbClient';
+import { SessionManager } from './clients/sessionManager';
 import { ProviderFactory } from './providers/ProviderFactory';
 import { Response } from 'express';
 
 /**
  * Main orchestrator for executing coding assistant requests
- * Handles GitHub pulling, provider execution, and DB persistence
+ * Handles session management, GitHub pulling, provider execution, and DB persistence
  */
 export class Orchestrator {
   private githubClient: GitHubClient;
   private dbClient: DBClient;
+  private sessionManager: SessionManager;
   private workspaceRoot: string;
 
   constructor(workspaceRoot: string, dbBaseUrl?: string) {
     this.workspaceRoot = workspaceRoot;
     this.githubClient = new GitHubClient();
     this.dbClient = new DBClient(dbBaseUrl);
+    this.sessionManager = new SessionManager(workspaceRoot);
   }
 
   /**
@@ -25,8 +28,12 @@ export class Orchestrator {
    */
   async execute(request: ExecuteRequest, res: Response): Promise<void> {
     const startTime = Date.now();
-    const sessionId = request.resumeSessionId || uuidv4();
     let chunkIndex = 0;
+    let providerSessionId: string | undefined;
+
+    // Determine session ID (resume existing or create new)
+    const isResuming = !!request.resumeSessionId;
+    const sessionId = isResuming ? request.resumeSessionId! : uuidv4();
 
     // Helper to send SSE events
     const sendEvent = (event: SSEEvent) => {
@@ -56,21 +63,58 @@ export class Orchestrator {
       // Step 1: Validate request
       this.validateRequest(request);
 
-      // Step 2: Determine workspace path
-      let workspacePath = request.workspace?.path || this.workspaceRoot;
+      // Step 2: Handle session workspace
+      let workspacePath: string;
+      let metadata: SessionMetadata | null = null;
+
+      if (isResuming) {
+        // Resume existing session
+        console.log(`[Orchestrator] Resuming session: ${sessionId}`);
+
+        if (!this.sessionManager.sessionExists(sessionId)) {
+          throw new Error(`Session not found: ${sessionId}`);
+        }
+
+        metadata = this.sessionManager.loadMetadata(sessionId);
+        if (!metadata) {
+          throw new Error(`Session metadata not found: ${sessionId}`);
+        }
+
+        // Get the provider session ID for resume
+        providerSessionId = metadata.providerSessionId;
+
+        // Use execution workspace (may be in cloned repo subdirectory)
+        workspacePath = this.sessionManager.getExecutionWorkspace(sessionId);
+
+        console.log(`[Orchestrator] Loaded session metadata:`, metadata);
+        console.log(`[Orchestrator] Workspace path: ${workspacePath}`);
+      } else {
+        // Create new session
+        console.log(`[Orchestrator] Creating new session: ${sessionId}`);
+
+        workspacePath = this.sessionManager.createSessionWorkspace(sessionId);
+
+        // Create initial metadata
+        metadata = this.sessionManager.createMetadata(
+          sessionId,
+          request.codingAssistantProvider
+        );
+
+        console.log(`[Orchestrator] Session workspace created: ${workspacePath}`);
+      }
 
       // Step 3: Send connection event
       sendEvent({
         type: 'connected',
         sessionId,
-        resuming: !!request.resumeSessionId,
-        resumedFrom: request.resumeSessionId,
+        resuming: isResuming,
+        resumedFrom: isResuming ? sessionId : undefined,
         provider: request.codingAssistantProvider,
         timestamp: new Date().toISOString()
       });
 
-      // Step 4: Pull GitHub repository if specified (and not resuming)
-      if (request.github && !request.resumeSessionId) {
+      // Step 4: Pull GitHub repository (only for new sessions with GitHub config)
+      if (request.github && !isResuming) {
         sendEvent({
           type: 'message',
           message: `Pulling repository: ${request.github.repoUrl}`,
@@ -82,10 +126,24 @@ export class Orchestrator {
           branch: request.github.branch,
           directory: request.github.directory,
           accessToken: request.github.accessToken,
-          workspaceRoot: this.workspaceRoot
+          workspaceRoot: workspacePath
         });
 
+        // Extract relative path for metadata
+        const repoName = pullResult.targetPath.replace(workspacePath + '/', '');
+
+        // Update metadata with GitHub info
+        metadata.github = {
+          repoUrl: request.github.repoUrl,
+          branch: pullResult.branch,
+          clonedPath: repoName
+        };
+
+        // Update workspace path to cloned repo
         workspacePath = pullResult.targetPath;
+
+        // Save metadata
+        this.sessionManager.saveMetadata(sessionId, metadata);
 
         sendEvent({
           type: 'github_pull_progress',
@@ -96,6 +154,8 @@ export class Orchestrator {
           },
           timestamp: new Date().toISOString()
         });
+
+        console.log(`[Orchestrator] Repository cloned to: ${workspacePath}`);
       }
 
       // Update DB with session metadata
@@ -134,10 +194,22 @@ export class Orchestrator {
         {
           accessToken: request.codingAssistantAccessToken,
           workspace: workspacePath,
-          resumeSessionId: request.resumeSessionId,
+          resumeSessionId: providerSessionId, // Use provider's internal session ID
           providerOptions: request.providerOptions
         },
         (event) => {
+          // Extract provider session ID from init message
+          if (event.type === 'assistant_message' &&
+              event.data?.type === 'system' &&
+              event.data?.subtype === 'init' &&
+              event.data?.session_id) {
+            const newProviderSessionId = event.data.session_id;
+            console.log(`[Orchestrator] Provider session ID: ${newProviderSessionId}`);
+
+            // Save provider session ID to metadata
+            this.sessionManager.updateProviderSessionId(sessionId, newProviderSessionId);
+          }
+
           // Forward provider events to SSE stream
           sendEvent({
             ...event,
@@ -171,6 +243,7 @@ export class Orchestrator {
         );
       }
 
+      console.log(`[Orchestrator] Session ${sessionId} completed in ${duration}ms`);
       res.end();
     } catch (error) {
       console.error('[Orchestrator] Error during execution:', error);
@@ -227,6 +300,14 @@ export class Orchestrator {
       );
     }
 
+    // Cannot provide both GitHub and resumeSessionId
+    if (request.github && request.resumeSessionId) {
+      throw new Error(
+        'Cannot provide both "github" and "resumeSessionId". ' +
+        'When resuming a session, the repository is already available in the session workspace.'
+      );
+    }
+
     if (request.github) {
       if (!request.github.repoUrl || request.github.repoUrl.trim() === '') {
         throw new Error('github.repoUrl is required when github integration is enabled');
@@ -247,11 +328,17 @@ export class Orchestrator {
    * Get error code from error object
    */
   private getErrorCode(error: any): string {
+    if (error.message?.includes('Session not found')) {
+      return 'session_not_found';
+    }
     if (error.message?.includes('token')) {
       return 'auth_error';
     }
     if (error.message?.includes('repository') || error.message?.includes('not found')) {
       return 'repo_not_found';
+    }
+    if (error.message?.includes('Cannot provide both')) {
+      return 'invalid_request';
     }
     return 'internal_error';
   }

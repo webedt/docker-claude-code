@@ -95,7 +95,22 @@ export interface APIError {
 export interface ExecutionContext {
   request: ExecuteRequest;
   sessionId: string;
+  volumeName: string;
   workspacePath: string;
   startTime: number;
   provider: any; // Provider-specific client instance
+}
+
+// Session metadata stored in volume
+export interface SessionMetadata {
+  sessionId: string;
+  providerSessionId?: string; // Internal provider session ID (e.g., Claude Code's session_id)
+  provider: string;
+  createdAt: string;
+  updatedAt: string;
+  github?: {
+    repoUrl: string;
+    branch: string;
+    clonedPath: string;
+  };
 }
