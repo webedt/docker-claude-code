@@ -45,8 +45,5 @@ ENV NODE_ENV=production
 # Expose port
 EXPOSE 5000
 
-# Use entrypoint script to set up credentials
-ENTRYPOINT ["/entrypoint.sh"]
-
 # Start the server
 CMD ["npm", "start"]
