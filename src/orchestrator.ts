@@ -8,6 +8,8 @@ import { SessionStorage } from './storage/sessionStorage';
 import { ProviderFactory } from './providers/ProviderFactory';
 import { Response } from 'express';
 import { logger } from './utils/logger';
+import { LLMHelper, generateBranchName } from './utils/llmHelper';
+import { GitHelper } from './utils/gitHelper';
 
 /**
  * Main orchestrator for executing coding assistant requests
@@ -136,6 +138,52 @@ export class Orchestrator {
         timestamp: new Date().toISOString()
       });
 
+      // Step 3.5: Generate session name (only for new sessions)
+      let sessionName: string | undefined;
+      let branchName: string | undefined;
+
+      if (!isResuming) {
+        // Extract API key for LLM helper
+        const apiKey = this.extractApiKey(request.codingAssistantAuthentication);
+
+        if (apiKey) {
+          try {
+            const llmHelper = new LLMHelper(apiKey);
+            sessionName = await llmHelper.generateSessionName(request.userRequest);
+
+            // Generate branch name if this is a GitHub session
+            if (request.github) {
+              branchName = generateBranchName(sessionName, sessionId.split('-')[0]);
+            }
+
+            // Update metadata with session name
+            metadata!.sessionName = sessionName;
+            // Note: GitHub branchName will be added to metadata after repo is cloned
+
+            // Send session name event
+            sendEvent({
+              type: 'session_name',
+              sessionName,
+              branchName,
+              timestamp: new Date().toISOString()
+            });
+
+            logger.info('Generated session metadata', {
+              component: 'Orchestrator',
+              sessionId,
+              sessionName,
+              branchName
+            });
+          } catch (error) {
+            logger.error('Failed to generate session name', error, {
+              component: 'Orchestrator',
+              sessionId
+            });
+            // Continue without session name - not critical
+          }
+        }
+      }
+
       // Step 4: Pull GitHub repository (only for new sessions with GitHub config)
       if (request.github && !isResuming) {
         sendEvent({
@@ -159,6 +207,7 @@ export class Orchestrator {
         metadata.github = {
           repoUrl: request.github.repoUrl,
           branch: pullResult.branch,
+          branchName: branchName, // Add generated branch name
           clonedPath: repoName
         };
 
@@ -184,6 +233,44 @@ export class Orchestrator {
           repoUrl: request.github.repoUrl,
           branch: pullResult.branch
         });
+
+        // Create branch if branchName was generated
+        if (branchName) {
+          try {
+            const gitHelper = new GitHelper(pullResult.targetPath);
+            const branchExists = await gitHelper.branchExists(branchName);
+
+            if (!branchExists) {
+              await gitHelper.createBranch(branchName);
+
+              sendEvent({
+                type: 'branch_created',
+                branchName,
+                message: `Created and checked out branch: ${branchName}`,
+                timestamp: new Date().toISOString()
+              });
+
+              logger.info('Created branch', {
+                component: 'Orchestrator',
+                sessionId,
+                branchName
+              });
+            } else {
+              logger.info('Branch already exists', {
+                component: 'Orchestrator',
+                sessionId,
+                branchName
+              });
+            }
+          } catch (error) {
+            logger.error('Failed to create branch', error, {
+              component: 'Orchestrator',
+              sessionId,
+              branchName
+            });
+            // Continue without branch creation - not critical
+          }
+        }
       } else if (metadata.github && isResuming) {
         // Resuming session with GitHub - workspace path should be repo directory
         workspacePath = path.join(this.tmpDir, `session-${sessionId}`, metadata.github.clonedPath);
@@ -257,6 +344,90 @@ export class Orchestrator {
           });
         }
       );
+
+      // Step 6.5: Auto-commit changes (if enabled and GitHub session)
+      const shouldAutoCommit = request.github && (request.autoCommit !== false); // Default true for GitHub repos
+
+      if (shouldAutoCommit && metadata.github) {
+        try {
+          const repoPath = path.join(this.tmpDir, `session-${sessionId}`, metadata.github.clonedPath);
+          const gitHelper = new GitHelper(repoPath);
+
+          // Check if there are changes to commit
+          const hasChanges = await gitHelper.hasChanges();
+
+          if (hasChanges) {
+            sendEvent({
+              type: 'commit_progress',
+              stage: 'analyzing',
+              message: 'Analyzing changes for auto-commit...',
+              timestamp: new Date().toISOString()
+            });
+
+            // Get git status and diff
+            const gitStatus = await gitHelper.getStatus();
+            const gitDiff = await gitHelper.getDiff();
+
+            sendEvent({
+              type: 'commit_progress',
+              stage: 'generating_message',
+              message: 'Generating commit message...',
+              timestamp: new Date().toISOString()
+            });
+
+            // Generate commit message
+            const apiKey = this.extractApiKey(request.codingAssistantAuthentication);
+            if (apiKey) {
+              const llmHelper = new LLMHelper(apiKey);
+              const commitMessage = await llmHelper.generateCommitMessage(gitStatus, gitDiff);
+
+              sendEvent({
+                type: 'commit_progress',
+                stage: 'committing',
+                message: 'Creating commit...',
+                commitMessage,
+                timestamp: new Date().toISOString()
+              });
+
+              // Create commit
+              const commitHash = await gitHelper.commitAll(commitMessage);
+
+              sendEvent({
+                type: 'commit_progress',
+                stage: 'completed',
+                message: 'Changes committed successfully',
+                commitMessage,
+                commitHash,
+                timestamp: new Date().toISOString()
+              });
+
+              logger.info('Auto-commit completed', {
+                component: 'Orchestrator',
+                sessionId,
+                commitHash,
+                commitMessage
+              });
+            }
+          } else {
+            logger.info('No changes to auto-commit', {
+              component: 'Orchestrator',
+              sessionId
+            });
+          }
+        } catch (error) {
+          logger.error('Failed to auto-commit changes', error, {
+            component: 'Orchestrator',
+            sessionId
+          });
+          // Continue without auto-commit - not critical
+          sendEvent({
+            type: 'commit_progress',
+            stage: 'completed',
+            message: 'Auto-commit failed (non-critical)',
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
 
       // Step 7: Upload session to MinIO
       logger.info('Uploading session to storage', {
@@ -373,6 +544,34 @@ export class Orchestrator {
 
       res.end();
       throw error; // Re-throw to trigger worker exit
+    }
+  }
+
+  /**
+   * Extract API key from authentication string
+   * Handles both OAuth JSON format and plain API keys
+   */
+  private extractApiKey(authentication: string): string | null {
+    try {
+      const parsed = JSON.parse(authentication);
+
+      // OAuth format: { claudeAiOauth: { accessToken: "..." } }
+      if (parsed.claudeAiOauth?.accessToken) {
+        return parsed.claudeAiOauth.accessToken;
+      }
+
+      // Plain API key in object: { apiKey: "..." }
+      if (parsed.apiKey) {
+        return parsed.apiKey;
+      }
+
+      return null;
+    } catch {
+      // If not JSON, might be plain API key
+      if (authentication.startsWith('sk-ant-')) {
+        return authentication;
+      }
+      return null;
     }
   }
 
