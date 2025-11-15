@@ -100,6 +100,10 @@ New files: ${status.not_added.join(', ') || 'none'}
       // Stage all changes
       await this.git.add('.');
 
+      // Ensure Git identity is configured (fallback if global config isn't loaded)
+      await this.git.addConfig('user.name', 'Unified Worker');
+      await this.git.addConfig('user.email', 'worker@unified-worker.local');
+
       // Commit
       const result = await this.git.commit(message);
 
@@ -114,6 +118,32 @@ New files: ${status.not_added.join(', ') || 'none'}
       logger.error('Failed to commit changes', error, {
         component: 'GitHelper',
         message
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Push current branch to remote
+   */
+  async push(remote: string = 'origin', branch?: string): Promise<void> {
+    try {
+      // Get current branch if not specified
+      const currentBranch = branch || await this.getCurrentBranch();
+
+      // Push to remote with upstream tracking
+      await this.git.push(['-u', remote, currentBranch]);
+
+      logger.info('Pushed to remote', {
+        component: 'GitHelper',
+        remote,
+        branch: currentBranch
+      });
+    } catch (error) {
+      logger.error('Failed to push to remote', error, {
+        component: 'GitHelper',
+        remote,
+        branch
       });
       throw error;
     }

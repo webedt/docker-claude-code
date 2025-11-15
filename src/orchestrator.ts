@@ -407,6 +407,46 @@ export class Orchestrator {
                 commitHash,
                 commitMessage
               });
+
+              // Push to remote
+              sendEvent({
+                type: 'commit_progress',
+                stage: 'pushing',
+                message: 'Pushing changes to remote...',
+                timestamp: new Date().toISOString()
+              });
+
+              try {
+                await gitHelper.push();
+
+                sendEvent({
+                  type: 'commit_progress',
+                  stage: 'pushed',
+                  message: 'Changes pushed to remote successfully',
+                  commitHash,
+                  timestamp: new Date().toISOString()
+                });
+
+                logger.info('Push completed', {
+                  component: 'Orchestrator',
+                  sessionId,
+                  commitHash
+                });
+              } catch (pushError) {
+                // Push failure is non-critical - commit is still saved locally
+                logger.error('Failed to push to remote (non-critical)', pushError, {
+                  component: 'Orchestrator',
+                  sessionId
+                });
+
+                sendEvent({
+                  type: 'commit_progress',
+                  stage: 'push_failed',
+                  message: 'Failed to push to remote (commit saved locally)',
+                  error: pushError instanceof Error ? pushError.message : String(pushError),
+                  timestamp: new Date().toISOString()
+                });
+              }
             }
           } else {
             logger.info('No changes to auto-commit', {

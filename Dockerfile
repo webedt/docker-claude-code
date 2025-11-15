@@ -27,6 +27,10 @@ RUN npm run build
 # Switch to non-root user
 USER worker
 
+# Configure Git identity for commits
+RUN git config --global user.email "worker@unified-worker.local" && \
+    git config --global user.name "Unified Worker"
+
 # Set environment variables
 ENV PORT=5000
 ENV WORKSPACE_DIR=/workspace

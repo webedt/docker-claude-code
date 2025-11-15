@@ -57,7 +57,7 @@ services:
     networks:
       - worker-network
     deploy:
-      replicas: 10
+      replicas: 5
       restart_policy:
         condition: any
         delay: 0s
