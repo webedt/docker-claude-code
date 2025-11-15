@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { ExecuteRequest, APIError } from './types';
@@ -7,6 +8,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const TMP_DIR = process.env.TMP_DIR || '/tmp';
 const DB_BASE_URL = process.env.DB_BASE_URL;
+
+// Default coding assistant credentials from environment (optional fallback)
+const DEFAULT_CODING_ASSISTANT_PROVIDER = process.env.CODING_ASSISTANT_PROVIDER;
+const DEFAULT_CODING_ASSISTANT_AUTHENTICATION = process.env.CODING_ASSISTANT_AUTHENTICATION;
+
+// Default GitHub token from environment (optional fallback)
+const DEFAULT_GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN;
 
 // Middleware
 app.use(cors());
@@ -126,24 +134,43 @@ app.post('/execute', async (req: Request, res: Response) => {
     return;
   }
 
-  if (!request.codingAssistantProvider) {
-    const error: APIError = {
-      error: 'invalid_request',
-      message: 'Missing required field: codingAssistantProvider',
-      field: 'codingAssistantProvider'
-    };
-    res.status(400).json(error);
-    return;
+  // Use environment variables as fallback for provider and authentication
+  if (!request.codingAssistantProvider || request.codingAssistantProvider === 'FROM_ENV') {
+    if (DEFAULT_CODING_ASSISTANT_PROVIDER) {
+      request.codingAssistantProvider = DEFAULT_CODING_ASSISTANT_PROVIDER;
+      console.log('[Server] Using CODING_ASSISTANT_PROVIDER from environment');
+    } else {
+      const error: APIError = {
+        error: 'invalid_request',
+        message: 'Missing required field: codingAssistantProvider (not in request or environment)',
+        field: 'codingAssistantProvider'
+      };
+      res.status(400).json(error);
+      return;
+    }
   }
 
-  if (!request.codingAssistantAuthentication) {
-    const error: APIError = {
-      error: 'invalid_request',
-      message: 'Missing required field: codingAssistantAuthentication',
-      field: 'codingAssistantAuthentication'
-    };
-    res.status(400).json(error);
-    return;
+  if (!request.codingAssistantAuthentication || request.codingAssistantAuthentication === 'FROM_ENV') {
+    if (DEFAULT_CODING_ASSISTANT_AUTHENTICATION) {
+      request.codingAssistantAuthentication = DEFAULT_CODING_ASSISTANT_AUTHENTICATION;
+      console.log('[Server] Using CODING_ASSISTANT_AUTHENTICATION from environment');
+    } else {
+      const error: APIError = {
+        error: 'invalid_request',
+        message: 'Missing required field: codingAssistantAuthentication (not in request or environment)',
+        field: 'codingAssistantAuthentication'
+      };
+      res.status(400).json(error);
+      return;
+    }
+  }
+
+  // Use environment variable as fallback for GitHub access token
+  if (request.github && (!request.github.accessToken || request.github.accessToken === 'FROM_ENV')) {
+    if (DEFAULT_GITHUB_ACCESS_TOKEN) {
+      request.github.accessToken = DEFAULT_GITHUB_ACCESS_TOKEN;
+      console.log('[Server] Using GITHUB_ACCESS_TOKEN from environment');
+    }
   }
 
   // Set worker to busy

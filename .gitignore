@@ -4,13 +4,3 @@ dist/
 *.log
 .DS_Store
 .claude/
-
-# Test files with credentials
-test-with-auth.json
-test-resume-minio.json
-test-resume-session.json
-test-resume-minio-with-auth.json
-test-initial-session.json
-initial-session-output.txt
-test-github-with-autocommit.json
-test-autocommit-output.txt

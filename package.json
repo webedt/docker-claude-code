@@ -26,6 +26,7 @@
     "@types/node": "^20.0.0",
     "@types/tar": "^6.1.13",
     "@types/uuid": "^9.0.0",
+    "dotenv": "^17.2.3",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.0"
   }

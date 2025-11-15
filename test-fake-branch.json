@@ -1,9 +1,0 @@
-{
-  "userRequest": "Test branch fallback",
-  "codingAssistantProvider": "claude-code",
-  "codingAssistantAccessToken": "placeholder",
-  "github": {
-    "repoUrl": "https://github.com/webedt/hello-world.git",
-    "branch": "nonexistent-branch-12345"
-  }
-}

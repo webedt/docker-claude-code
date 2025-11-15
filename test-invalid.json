@@ -1,9 +1,0 @@
-{
-  "userRequest": "This should fail",
-  "codingAssistantProvider": "claude-code",
-  "codingAssistantAccessToken": "placeholder",
-  "resumeSessionId": "ab58e9ea-bbd6-4766-a41e-dc20ca4d03e5",
-  "github": {
-    "repoUrl": "https://github.com/webedt/hello-world.git"
-  }
-}

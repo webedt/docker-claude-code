@@ -1,10 +1,11 @@
 {
-  "userRequest": "List all files in this repository",
   "codingAssistantProvider": "FROM_ENV",
   "codingAssistantAuthentication": "FROM_ENV",
+  "userRequest": "Add a hello.txt file with a greeting",
   "github": {
     "repoUrl": "https://github.com/webedt/hello-world.git",
     "branch": "main",
     "accessToken": "FROM_ENV"
-  }
+  },
+  "autoCommit": true
 }
