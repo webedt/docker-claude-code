@@ -72,27 +72,47 @@ export class CredentialManager {
 
   /**
    * Write Claude Agent SDK credentials
-   * @param apiKey - Anthropic API key
+   * @param authentication - Anthropic API key or OAuth JSON string
    */
-  static writeClaudeCredentials(apiKey: string): void {
+  static writeClaudeCredentials(authentication: string): void {
     const credentialPath = this.getClaudeCredentialPath();
-    const credentials = {
-      apiKey: apiKey,
-      createdAt: new Date().toISOString()
-    };
+
+    // Parse authentication if it's JSON, otherwise treat as plain API key
+    let credentials: any;
+    try {
+      credentials = JSON.parse(authentication);
+      // If it's valid JSON, write it as-is (could be OAuth structure or other format)
+    } catch {
+      // Not JSON, treat as plain API key
+      credentials = {
+        apiKey: authentication,
+        createdAt: new Date().toISOString()
+      };
+    }
+
     this.writeCredentialFile(credentialPath, credentials);
   }
 
   /**
    * Write Codex SDK credentials
-   * @param authToken - Codex authentication token
+   * @param authentication - Codex authentication token or JSON structure
    */
-  static writeCodexCredentials(authToken: string): void {
+  static writeCodexCredentials(authentication: string): void {
     const credentialPath = this.getCodexCredentialPath();
-    const credentials = {
-      authToken: authToken,
-      createdAt: new Date().toISOString()
-    };
+
+    // Parse authentication if it's JSON, otherwise treat as plain auth token
+    let credentials: any;
+    try {
+      credentials = JSON.parse(authentication);
+      // If it's valid JSON, write it as-is (could be OAuth structure or other format)
+    } catch {
+      // Not JSON, treat as plain auth token
+      credentials = {
+        authToken: authentication,
+        createdAt: new Date().toISOString()
+      };
+    }
+
     this.writeCredentialFile(credentialPath, credentials);
   }
 

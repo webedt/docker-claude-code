@@ -1,0 +1,5 @@
+{
+  "userRequest": "Create a hello.txt file with the text: Hello from ClaudeAgentSDK!",
+  "codingAssistantProvider": "ClaudeAgentSDK",
+  "codingAssistantAuthentication": "{\"claudeAiOauth\":{\"accessToken\":\"sk-ant-oat01-REPLACE_WITH_YOUR_TOKEN\",\"refreshToken\":\"sk-ant-ort01-REPLACE_WITH_YOUR_TOKEN\",\"expiresAt\":1763242829010,\"scopes\":[\"user:inference\",\"user:profile\"],\"subscriptionType\":\"max\"}}"
+}

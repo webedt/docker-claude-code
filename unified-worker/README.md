@@ -33,24 +33,24 @@ See [../unified-api/API_SPEC.md](../unified-api/API_SPEC.md) for complete API do
 ### Quick Example
 
 ```bash
-curl -X POST http://localhost:5000/execute \
+curl -X POST http://localhost:5001/execute \
   -H "Content-Type: application/json" \
   -d '{
     "userRequest": "Create a hello world function",
-    "codingAssistantProvider": "claude-code",
-    "codingAssistantAccessToken": "sk-ant-..."
+    "codingAssistantProvider": "ClaudeAgentSDK",
+    "codingAssistantAuthentication": "{\"claudeAiOauth\":{\"accessToken\":\"sk-ant-oat01-...\",\"refreshToken\":\"sk-ant-ort01-...\"}}"
   }'
 ```
 
 ### With GitHub Integration
 
 ```bash
-curl -X POST http://localhost:5000/execute \
+curl -X POST http://localhost:5001/execute \
   -H "Content-Type: application/json" \
   -d '{
     "userRequest": "Add error handling to the API",
-    "codingAssistantProvider": "claude-code",
-    "codingAssistantAccessToken": "sk-ant-...",
+    "codingAssistantProvider": "ClaudeAgentSDK",
+    "codingAssistantAuthentication": "{\"claudeAiOauth\":{\"accessToken\":\"sk-ant-oat01-...\",\"refreshToken\":\"sk-ant-ort01-...\"}}",
     "github": {
       "repoUrl": "https://github.com/user/repo.git",
       "branch": "main"
@@ -96,9 +96,14 @@ unified-worker/
 npm install
 ```
 
-2. **Create .env file**:
+2. **Configure credentials**:
 ```bash
-CLAUDE_CODE_CREDENTIALS_JSON='{"claudeAiOauth":{...}}'
+# Copy example files
+cp .env.example .env
+cp test-with-auth.json.example test-with-auth.json
+
+# Edit .env and test-with-auth.json with your OAuth credentials
+# Get OAuth tokens from https://claude.ai
 ```
 
 3. **Run locally**:
@@ -175,11 +180,10 @@ docker stack rm unified-worker-stack
 |----------|----------|---------|-------------|
 | `PORT` | No | 5000 | Server port |
 | `WORKSPACE_DIR` | No | /workspace | Working directory for code |
-| `CLAUDE_CODE_CREDENTIALS_JSON` | Yes* | - | Claude Code credentials |
-| `CLAUDE_CODE_CREDENTIALS_SECRET` | Yes* | - | Docker secret path (Swarm) |
 | `DB_BASE_URL` | No | - | Database API URL |
+| `CLAUDE_AUTH_JSON` | No | - | Claude OAuth credentials (for testing) |
 
-*Either credentials JSON or secret required
+**Note**: Authentication is now passed via API requests in the `codingAssistantAuthentication` field, not environment variables.
 
 ## Endpoints
 
@@ -189,8 +193,8 @@ Main execution endpoint. Accepts JSON payload with:
 
 **Required**:
 - `userRequest`: The prompt/instruction
-- `codingAssistantProvider`: Provider name (e.g., "claude-code")
-- `codingAssistantAccessToken`: Provider credentials
+- `codingAssistantProvider`: Provider name (e.g., "ClaudeAgentSDK", "CodexSDK")
+- `codingAssistantAuthentication`: Provider credentials (OAuth JSON or API key)
 
 **Optional**:
 - `resumeSessionId`: Resume existing session

@@ -26,23 +26,68 @@ export class ClaudeCodeProvider extends BaseProvider {
   ): Promise<void> {
     const queryOptions = this.createQueryOptions(options);
 
+    console.log('[ClaudeCodeProvider] Starting execution with options:', {
+      model: queryOptions.model,
+      cwd: queryOptions.cwd,
+      permissionMode: queryOptions.permissionMode,
+      resumeSessionId: queryOptions.resume
+    });
+
     try {
       const queryStream = query({
         prompt: userRequest,
         options: queryOptions
       });
 
+      let lastMessage: any = null;
+
       // Stream messages from Claude Code
       for await (const message of queryStream) {
+        lastMessage = message;
+
+        // Log important message types
+        if (message.type === 'system' && message.subtype === 'init') {
+          console.log('[ClaudeCodeProvider] Claude Code initialized, session:', message.session_id);
+        }
+
+        // Log error messages
+        if (message.type === 'assistant' && message.message?.content) {
+          const content = message.message.content;
+          if (Array.isArray(content)) {
+            for (const item of content) {
+              if (item.type === 'text' && item.text) {
+                console.log('[ClaudeCodeProvider] Assistant message:', item.text);
+              }
+            }
+          }
+        }
+
+        // Log result messages
+        if (message.type === 'result') {
+          console.log('[ClaudeCodeProvider] Result:', {
+            subtype: message.subtype,
+            is_error: message.is_error,
+            duration_ms: message.duration_ms,
+            error_message: (message as any).error_message || (message as any).result
+          });
+        }
+
         onEvent({
           type: 'assistant_message',
           data: message
         });
       }
 
-      // Success - no explicit completion event needed
-      // The orchestrator will handle completion
+      console.log('[ClaudeCodeProvider] Execution completed successfully');
     } catch (error) {
+      console.error('[ClaudeCodeProvider] Execution error:', error);
+      console.error('[ClaudeCodeProvider] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        code: (error as any)?.code,
+        exitCode: (error as any)?.exitCode
+      });
+
       // Re-throw to let orchestrator handle
       throw error;
     }
