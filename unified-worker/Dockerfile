@@ -24,10 +24,6 @@ COPY src ./src
 # Build TypeScript
 RUN npm run build
 
-# Create .claude directory for credentials
-RUN mkdir -p /home/worker/.claude && \
-    chown -R worker:worker /home/worker/.claude
-
 # Switch to non-root user
 USER worker
 
