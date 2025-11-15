@@ -68,7 +68,7 @@ export class SessionStorage {
 
   /**
    * Download session from MinIO to local workspace
-   * Restores both workspace and ~/.claude for complete session state
+   * Restores workspace, ~/.claude, and ~/.codex for complete session state
    * Creates empty workspace if session doesn't exist
    */
   async downloadSession(sessionId: string, localPath: string): Promise<boolean> {
@@ -129,6 +129,21 @@ export class SessionStorage {
         });
       }
 
+      // Restore ~/.codex if it exists in the archive
+      const codexExtractPath = path.join(tmpExtractDir, '.codex');
+      if (fs.existsSync(codexExtractPath)) {
+        const codexDestPath = path.join(homeDir, '.codex');
+        // Remove existing ~/.codex to avoid conflicts
+        if (fs.existsSync(codexDestPath)) {
+          fs.rmSync(codexDestPath, { recursive: true, force: true });
+        }
+        await this.copyDirectory(codexExtractPath, codexDestPath);
+        logger.info('Restored ~/.codex from session', {
+          component: 'SessionStorage',
+          sessionId
+        });
+      }
+
       // Cleanup
       fs.unlinkSync(tarPath);
       fs.rmSync(tmpExtractDir, { recursive: true, force: true });
@@ -161,7 +176,7 @@ export class SessionStorage {
 
   /**
    * Upload session from local workspace to MinIO
-   * Includes both workspace and ~/.claude for complete session state
+   * Includes workspace, ~/.claude, and ~/.codex for complete session state
    */
   async uploadSession(sessionId: string, localPath: string): Promise<void> {
     if (!this.enabled || !this.minio || !this.bucket) {
@@ -176,13 +191,15 @@ export class SessionStorage {
     const tarPath = `${localPath}-complete.tar.gz`;
     const homeDir = process.env.HOME || '/home/worker';
     const claudeDir = path.join(homeDir, '.claude');
+    const codexDir = path.join(homeDir, '.codex');
 
     try {
       logger.info('Uploading session to MinIO', {
         component: 'SessionStorage',
         sessionId,
         localPath,
-        claudeDir
+        claudeDir,
+        codexDir
       });
 
       // Create a temporary directory to organize files for the tarball
@@ -197,6 +214,12 @@ export class SessionStorage {
       if (fs.existsSync(claudeDir)) {
         const claudeDestDir = path.join(tmpPackageDir, '.claude');
         await this.copyDirectory(claudeDir, claudeDestDir);
+      }
+
+      // Copy ~/.codex to package directory (if it exists)
+      if (fs.existsSync(codexDir)) {
+        const codexDestDir = path.join(tmpPackageDir, '.codex');
+        await this.copyDirectory(codexDir, codexDestDir);
       }
 
       // Create tarball from package directory
