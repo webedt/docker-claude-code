@@ -48,16 +48,19 @@ export class Orchestrator {
     const isResuming = !!request.resumeSessionId;
     const sessionId = isResuming ? request.resumeSessionId! : uuidv4();
 
-    // Local workspace path (ephemeral - in /tmp)
-    workspacePath = path.join(this.tmpDir, `session-${sessionId}`);
+    // Session root path (never changes - used for response/metadata storage)
+    const sessionRoot = path.join(this.tmpDir, `session-${sessionId}`);
+
+    // Local workspace path (ephemeral - in /tmp, may change to repo directory)
+    workspacePath = sessionRoot;
 
     // Helper to send SSE events
     const sendEvent = (event: SSEEvent) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
 
-      // Persist to local session workspace (will be uploaded to MinIO at end)
+      // Persist to session root (not repo directory) - will be uploaded to MinIO at end
       try {
-        this.sessionStorage.appendStreamEvent(sessionId, workspacePath!, event);
+        this.sessionStorage.appendStreamEvent(sessionId, sessionRoot, event);
       } catch (err) {
         logger.error('Failed to persist event', err, {
           component: 'Orchestrator',
@@ -475,7 +478,7 @@ export class Orchestrator {
         sessionId
       });
 
-      await this.sessionStorage.uploadSession(sessionId, path.join(this.tmpDir, `session-${sessionId}`));
+      await this.sessionStorage.uploadSession(sessionId, sessionRoot);
 
       // Step 8: Send completion event
       const duration = Date.now() - startTime;
@@ -511,7 +514,7 @@ export class Orchestrator {
 
       // Step 9: Cleanup local workspace
       try {
-        fs.rmSync(path.join(this.tmpDir, `session-${sessionId}`), { recursive: true, force: true });
+        fs.rmSync(sessionRoot, { recursive: true, force: true });
         logger.info('Local workspace cleaned up', {
           component: 'Orchestrator',
           sessionId
@@ -541,8 +544,8 @@ export class Orchestrator {
 
       // Try to upload session even on error (preserve state)
       try {
-        if (workspacePath && fs.existsSync(path.join(this.tmpDir, `session-${sessionId}`))) {
-          await this.sessionStorage.uploadSession(sessionId, path.join(this.tmpDir, `session-${sessionId}`));
+        if (workspacePath && fs.existsSync(sessionRoot)) {
+          await this.sessionStorage.uploadSession(sessionId, sessionRoot);
         }
       } catch (uploadErr) {
         logger.error('Failed to upload session after error', uploadErr, {
@@ -553,8 +556,8 @@ export class Orchestrator {
 
       // Cleanup local workspace
       try {
-        if (fs.existsSync(path.join(this.tmpDir, `session-${sessionId}`))) {
-          fs.rmSync(path.join(this.tmpDir, `session-${sessionId}`), { recursive: true, force: true });
+        if (fs.existsSync(sessionRoot)) {
+          fs.rmSync(sessionRoot, { recursive: true, force: true });
         }
       } catch (cleanupErr) {
         logger.error('Failed to cleanup local workspace after error', cleanupErr, {

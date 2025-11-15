@@ -394,10 +394,12 @@ export class SessionStorage {
   }
 
   /**
-   * Get stream events from the session workspace
+   * Get stream events from /response directory
    */
   getStreamEvents(sessionId: string, localPath: string): SSEEvent[] {
-    const eventsPath = path.join(localPath, '.stream-events.jsonl');
+    // Read stream events from /response directory
+    const responseDir = path.join(localPath, 'response');
+    const eventsPath = path.join(responseDir, 'stream-events.jsonl');
 
     if (!fs.existsSync(eventsPath)) {
       return [];
@@ -417,12 +419,19 @@ export class SessionStorage {
   }
 
   /**
-   * Append stream event to the session workspace
+   * Append stream event to /response directory (separate from workspace)
    */
   appendStreamEvent(sessionId: string, localPath: string, event: SSEEvent): void {
-    const eventsPath = path.join(localPath, '.stream-events.jsonl');
+    // Store stream events in /response directory, not in the workspace
+    const responseDir = path.join(localPath, 'response');
+    const eventsPath = path.join(responseDir, 'stream-events.jsonl');
 
     try {
+      // Create response directory if it doesn't exist
+      if (!fs.existsSync(responseDir)) {
+        fs.mkdirSync(responseDir, { recursive: true });
+      }
+
       const eventLine = JSON.stringify(event) + '\n';
       fs.appendFileSync(eventsPath, eventLine, 'utf-8');
     } catch (error) {
