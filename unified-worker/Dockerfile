@@ -28,12 +28,6 @@ RUN npm run build
 RUN mkdir -p /home/worker/.claude && \
     chown -R worker:worker /home/worker/.claude
 
-# Copy and prepare entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN sed -i 's/\r$//' /entrypoint.sh && \
-    chmod +x /entrypoint.sh && \
-    chown worker:worker /entrypoint.sh
-
 # Switch to non-root user
 USER worker
 
